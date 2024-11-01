@@ -1,0 +1,144 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Build') {
+            steps {
+                sh 'mvn clean package'  // Build the project
+            }
+        }
+        stage('Unit Test') {
+            steps {
+                junit '**/target/surefire-reports/*.xml'  // JUnit Test Results
+            }
+        }
+        stage('Code Coverage') {
+            steps {
+                jacoco execPattern: '**/target/*.exec', classPattern: '**/target/classes', sourcePattern: '**/src/main/java'  // Jacoco coverage reports
+            }
+        }
+        stage('Functional Tests') {
+            steps {
+                sh 'pytest --junitxml=selenium_report.xml'  // Run Selenium functional tests with pytest
+                junit 'selenium_report.xml'  // Report results
+            }
+        }
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('MySonarQube') {
+                    sh 'mvn sonar:sonar'  // SonarQube static analysis
+                }
+            }
+        }
+        stage('Quality Gate') {
+            steps {
+                waitForQualityGate abortPipeline: true  // Fail if SonarQube Quality Gate is not passed
+            }
+        }
+        stage('API Tests with Postman') {
+            steps {
+                // Execute Postman collection using Newman
+                sh '''
+                    newman run path/to/your_collection.json \
+                        --environment path/to/your_environment.json \
+                        --reporters cli,junit \
+                        --reporter-junit-export newman-results.xml
+                '''
+                junit 'newman-results.xml'  // Publish the results in Jenkins
+            }
+        }
+    }
+
+    post {
+        failure {
+            mail to: 'team@example.com',
+                subject: "Pipeline Failed: ${currentBuild.fullDisplayName}",
+                body: "Please check the Jenkins pipeline ${env.BUILD_URL}"
+        }
+    }
+}
+
+
+
+/*
+Summary:
+Unit Tests (JUnit, Pytest, Unittest) run during the Unit Test stage.
+Selenium Functional Tests run in their own stage.
+SonarQube integrates in the pipeline for static code analysis, and the Quality Gate stage ensures only high-quality code proceeds further.
+Code Coverage tools like Jacoco or Coverage.py are integrated to track test coverage.
+Post-build steps can be used for notifications or further actions.
+This setup ensures that your CI/CD pipeline enforces code quality and test standards before delivery.
+*/
+
+/* 
+1. Set Up Jenkins Pipeline
+Use Jenkins Pipeline (either Declarative or Scripted) to define your build stages.
+Ensure that the necessary tools (e.g., SonarQube, JUnit, Selenium, and code coverage tools like Jacoco or Cobertura) are installed and configured on your Jenkins server.
+2. Integrate Unit Testing (JUnit, Pytest, or Unittest)
+
+Depending on your programming language, you will include a testing step for unit tests. Jenkins natively supports JUnit, and there are plugins for Pytest and Unittest.
+
+Example for JUnit (Java):
+Install the JUnit plugin from Jenkins Plugin Manager.
+In your pipeline, use Maven or Gradle to execute unit tests and produce JUnit XML reports.
+
+Example for Pytest (Python):
+Install the ShiningPanda Plugin for Python support, or configure Python manually.
+Install pytest and configure it to generate XML reports.
+
+3. Integrate Selenium Functional Tests
+For Selenium tests, you typically run them as a separate stage. Ensure that the Selenium WebDriver is available on your test machine (either locally or through services like Selenium Grid or Docker).
+
+Install the Selenium Plugin if needed, or configure your pipeline to use Selenium WebDriver.
+
+4. Integrate SonarQube Quality Gate
+SonarQube performs static code analysis and applies Quality Gates to decide whether the build passes or fails. You can integrate SonarQube into Jenkins and enforce these gates using the waitForQualityGate step.
+
+Install the SonarQube Scanner Plugin.
+Configure SonarQube in Jenkins > Manage Jenkins > Configure System by adding your SonarQube server and authentication token.
+
+5. Code Coverage with Jacoco (Java Example)
+To track code coverage, you can use Jacoco for Java or Coverage.py for Python.
+
+Jacoco (for Java):
+Install the Jacoco Plugin.
+Configure your Maven or Gradle project to generate Jacoco reports.
+
+6. Reporting and Notifications
+To provide feedback on test and quality gate results:
+
+Use JUnit and SonarQube results to trigger failure notifications (e.g., Slack or email) based on the outcome of the pipeline.
+Use Post-build actions or the final stage of your pipeline for notifications.
+
+
+
+/*
+
+Explanation of the Pipeline
+Build Stage:
+
+This stage builds the project, e.g., using Maven in Java.
+Unit Test Stage:
+
+This runs unit tests (e.g., JUnit) and reports the results.
+Code Coverage Stage:
+
+Jacoco is used to generate code coverage reports.
+Functional Tests Stage:
+
+Selenium functional tests are executed using Pytest.
+SonarQube Analysis and Quality Gate:
+
+SonarQube runs static analysis, and the waitForQualityGate ensures that the pipeline stops if quality thresholds are not met.
+API Tests with Postman (Newman):
+
+Newman runs the Postman collection using the newman run command.
+The --environment flag specifies the environment file, which contains variables like API URLs, if applicable.
+The --reporters option specifies that results are reported in the CLI (console) and in JUnit format (newman-results.xml).
+The results are published using the junit step in Jenkins to integrate with the pipeline dashboard.
+Additional Options for Newman
+Fail on test failure: By default, Newman will cause the pipeline to fail if any tests fail. You can modify this behavior using the --suppress-exit-code flag if you want to continue the pipeline even if tests fail.
+
+Custom reporters: You can add more reporters like html or json to generate custom reports for Postman tests.
+
+*/
